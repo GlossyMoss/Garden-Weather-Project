@@ -1,0 +1,237 @@
+---
+title: "How to Set-up and Interactive Temperature Threshold Explorer"
+author: "Wendy Horvat"
+date: "`r Sys.Date()`"
+output: html_document
+runtime: shiny
+---
+
+
+
+# 📦 Libraries
+library(shiny)
+
+library(dplyr)
+
+library(lubridate)
+
+library(ggplot2)
+
+library(tidyverse)
+
+library(lubridate)
+
+```{r setup, include=FALSE}
+library(shiny)
+library(dplyr)
+library(lubridate)
+library(ggplot2)
+library(tidyverse)
+library(lubridate)
+```
+
+Note:`%>%` comes from **magrittr**, but loading **dplyr** also makes it available.
+
+---
+
+
+
+# 📊 Load data
+```{r}
+csv_data <- read_csv("portland_1871_11_2022-12_temp_prec.csv")
+```
+## Inputs and Outputs
+This R Markdown document is made interactive using Shiny. Unlike the more traditional workflow of creating static reports, you can now create documents that allow your readers to change the assumptions underlying your analysis and see the results immediately. 
+
+To learn more, see [Interactive Documents](http://rmarkdown.rstudio.com/authoring_shiny.html).
+
+
+You can embed Shiny inputs and outputs in your document. Outputs are automatically updated whenever inputs change.  This demonstrates how a standard R plot can be made interactive by wrapping it in the Shiny `renderPlot` function. The `selectInput` and `sliderInput` functions create the input widgets used to drive the plot.
+
+# Translating a ggplot into an r shiny markdown
+
+Now we will turn the ggplot into an interactive shiny plot where the freeze temperature is a user selected parameter within the html markdown file so that the reader can toggle the button to modify the temperature threshold for the first and last date on which the selected temperature occurs
+
+The key is to do it in a way that actually works inside an R Markdown Shiny document, not a standalone script.
+
+We will walk through a clean, correct R Markdown version where the user can toggle the temperature threshold with a slider and the ggplot updates interactively.
+
+## ✅ Important concept first
+
+# In an R Markdown Shiny document:
+
+You DO NOT use shinyApp(ui, server) like you might do in a stand alone application file.
+You DO NOT build a separate server object
+You instead use:
+input$...
+renderPlot()
+plotOutput()
+
+inside the document directly.
+
+## 🟢 WORKING R MARKDOWN SHINY VERSION
+
+# Save this as:
+
+To begin we open an r markdown file that we will name
+temperature_threshold.Rmd
+
+# To create the slider
+🎚️ User input (slider)
+This creates the interactive temperature threshold control.
+
+# 📈 Interactive ggplot output
+
+This is where the magic happens: the plot automatically updates when the slider changes.
+
+```{r temp_threshold, echo=FALSE}
+sliderInput(
+  inputId = "temp_threshold",
+  label = "Temperature threshold (°F)",
+  min = 28,
+  max = 60,
+  value = 32,
+  step = 1
+)
+
+
+renderPlot({
+
+  temp_threshold <- input$temp_threshold
+
+  processed_data <- csv_data %>%
+    mutate(
+      year = year(DATE),
+      month = month(DATE),
+      yday = yday(DATE)
+    )
+
+  threshold_event_days <- processed_data %>%
+    filter(TMIN <= temp_threshold)
+
+  first_threshold_event <- processed_data %>%
+    group_by(year) %>%
+    filter(TMIN <= temp_threshold, month > 7) %>%
+    summarise(first_date = min(DATE), .groups = "drop") %>%
+    mutate(yday = yday(first_date))
+
+  last_threshold_event <- processed_data %>%
+    group_by(year) %>%
+    filter(TMIN <= temp_threshold, month < 7) %>%
+    summarise(last_date = max(DATE), .groups = "drop") %>%
+    mutate(yday = yday(last_date))
+
+  ggplot() +
+
+    geom_point(
+      data = threshold_event_days,
+      aes(y = year, x = as.Date(yday, origin = "2020-01-01")),
+      color = "gray",
+      size = 0.8
+    ) +
+
+    geom_point(
+      data = first_threshold_event,
+      aes(y = year, x = as.Date(yday, origin = "2020-01-01")),
+      fill = "purple",
+      shape = 21,
+      size = 3,
+      color = "black"
+    ) +
+
+    geom_point(
+      data = last_threshold_event,
+      aes(y = year, x = as.Date(yday, origin = "2020-01-01")),
+      fill = "blue",
+      shape = 21,
+      size = 3,
+      color = "black"
+    ) +
+
+    scale_y_reverse() +
+    scale_x_date(date_labels = "%b", breaks = "month") +
+    theme_minimal() +
+
+    labs(
+      title = paste("Temperature threshold:", temp_threshold, "°F"),
+      x = NULL,
+      y = NULL
+    )
+})
+```
+
+
+
+## Embedded Application
+
+It's also possible to embed an entire Shiny application within an R Markdown document using the `shinyAppDir` function. This example embeds a Shiny application located in another directory:
+
+```{r tabsets, echo=FALSE}
+shinyAppDir(
+  system.file("examples/06_tabsets", package = "shiny"),
+  options = list(
+    width = "100%", height = 550
+  )
+)
+```
+
+Note the use of the `height` parameter to determine how much vertical space the embedded application should occupy.
+
+You can also use the `shinyApp` function to define an application inline rather then in an external directory.
+
+In all of R code chunks above the `echo = FALSE` attribute is used. This is to prevent the R code within the chunk from rendering in the document alongside the Shiny components.
+# Annual First and Last Freeze Dates for Portland, Oregon
+
+
+
+🧠
+
+What makes this interactive
+1. runtime: shiny
+
+This tells R Markdown:
+
+👉 “this document is not static — it is interactive”
+2. input$temp_threshold
+
+This is the live value from the slider.
+
+Every time the user moves it:
+
+✔ plot recomputes
+✔ data re-filters
+✔ ggplot redraws
+
+3. renderPlot()
+
+This wraps ggplot so it becomes reactive.
+
+🎯 What the user experiences
+
+They will see:
+
+a slider labeled Temperature threshold (°F)
+a plot below it
+moving the slider instantly changes:
+gray event points
+first threshold event (purple)
+last threshold event (blue)
+title updates dynamically
+
+
+⚠️ Common mistake to avoid
+
+Do NOT wrap this in:
+
+shinyApp(ui, server)
+
+That is only for standalone .R apps, not .Rmd.
+
+📊 Better interactivity
+dropdown for different cities
+multiple thresholds at once
+compare years side-by-side
+📈 More insight
+trend line showing shift in first frost timing
+rolling average smoothing
+anomaly detection (early/late cold years)

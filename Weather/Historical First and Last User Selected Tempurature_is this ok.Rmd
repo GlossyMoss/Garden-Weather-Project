@@ -1,0 +1,628 @@
+---
+title: "First and Last of User Selected Tempurature"
+author: "Wendy Horvat"
+date: "`r Sys.Date()`"
+output: html_document
+runtime: shiny
+---
+# Annual First and Last Freeze Dates for Portland, Oregon
+
+## Introduction
+
+This tutorial demonstrates how to analyze historical daily temperature observations to determine:
+
+* the **last freezing day** of each winter/spring,
+* the **first freezing day** of each fall/winter, and
+* every day during the year where the minimum temperature was at or below a selected freezing threshold.
+
+The finished figure provides a visual summary of how freeze dates have changed over more than 150 years of weather observations.
+
+---
+
+# Required Packages
+
+```{r}
+library(tidyverse)
+library(lubridate)
+library(ggtext)
+library(ggplot2)
+```
+
+## Why these packages?
+
+### tidyverse
+
+The **tidyverse** is a collection of packages designed for data science. It includes tools for:
+
+* reading data (`readr`)
+* filtering rows
+* creating new variables
+* grouping observations
+* summarizing data
+* plotting with **ggplot2**
+
+Using the tidyverse makes code easier to read because data operations are written as a sequence of steps using the pipe operator (`%>%`).
+
+---
+
+### lubridate
+
+Weather data usually contains dates.
+
+The **lubridate** package makes it easy to extract pieces of a date such as:
+
+* year
+* month
+* day of year
+
+instead of writing complicated date calculations manually.
+
+---
+
+### ggtext
+
+Normally plot titles only allow plain text.
+
+The **ggtext** package allows:
+
+* bold text
+* colored text
+* multiple font sizes
+* HTML formatting
+
+This makes it possible to include a legend directly inside the plot title.
+
+---
+
+# Import the Weather Data
+
+```{r}
+csv_data <- read_csv("portland_1871_11_2022-12_temp_prec.csv")
+```
+
+The dataset contains daily observations including:
+
+* DATE
+* minimum temperature (`TMIN`)
+* maximum temperature
+* precipitation
+
+The analysis only requires the date and minimum temperature.
+
+---
+
+# Choose the Freeze Threshold
+
+```{r}
+FREEZE <- 32
+```
+
+Using a variable instead of typing **32** throughout the script makes it easy to repeat the analysis using another threshold such as:
+
+```r
+FREEZE <- 28
+```
+
+or
+
+```r
+FREEZE <- 30
+```
+
+Changing one line updates the entire analysis.
+
+---
+
+# Extract Useful Date Information
+
+```{r}
+extract_dates <- csv_data %>%
+  mutate(
+    year = year(DATE),
+    month = month(DATE),
+    yday = yday(DATE)
+  )
+```
+
+The `mutate()` function creates new columns.
+
+This code extracts:
+
+| Variable | Description                               |
+| -------- | ----------------------------------------- |
+| year     | Calendar year                             |
+| month    | Month number (1–12)                       |
+| yday     | Day number within the year (1–365 or 366) |
+
+Using the day-of-year allows every year's freeze dates to be plotted on the same January–December axis.
+
+---
+
+# Find Every Freezing Day
+
+```{r}
+freeze_days <- extract_dates %>%
+  select(year, TMIN, yday) %>%
+  group_by(year) %>%
+  filter(TMIN <= FREEZE)
+```
+
+This keeps every day where the minimum temperature is at or below the selected freeze threshold.
+
+These become the small gray dots in the final figure.
+
+---
+
+# Find the First Freeze of Autumn
+
+```{r}
+first_freeze <- extract_dates %>%
+  group_by(year) %>%
+  filter(TMIN <= FREEZE, month > 7) %>%
+  summarise(min = min(DATE))
+```
+
+Why `month > 7`?
+
+Only August through December are searched.
+
+Otherwise a January freeze would incorrectly be identified as the year's "first" freeze.
+
+---
+
+# Find the Last Freeze of Spring
+
+```{r}
+last_freeze <- extract_dates %>%
+  group_by(year) %>%
+  filter(TMIN <= FREEZE, month < 7) %>%
+  summarise(max = max(DATE))
+```
+
+Only January through June are searched.
+
+This identifies the last freezing event before summer.
+
+---
+
+# Convert Dates to Day of Year
+
+```{r}
+first_freeze_yday <- first_freeze %>%
+  mutate(yday = yday(min))
+
+last_freeze_yday <- last_freeze %>%
+  mutate(yday = yday(max))
+```
+
+The x-axis will display months.
+
+Internally, ggplot uses dates, so the day number is converted into a temporary date.
+
+The actual year used is unimportant.
+
+---
+
+# Building the Plot
+
+```{r}
+freeze <- ggplot()
+```
+
+Everything added afterward becomes a new **layer**.
+
+Think of ggplot like stacking transparent sheets on top of one another.
+
+---
+
+## Layer 1 — Gray Freeze Days
+
+```r
+geom_point(
+  data = freeze_days,
+  aes(
+    y = year,
+    x = as.Date(yday, origin = "2020-01-01")
+  ),
+  color = "gray",
+  size = 0.8
+)
+```
+
+This layer plots every freezing day.
+
+Important arguments:
+
+| Argument | Purpose                |
+| -------- | ---------------------- |
+| data     | Dataset being plotted  |
+| aes()    | Maps variables to axes |
+| x        | Day of year            |
+| y        | Calendar year          |
+| color    | Point color            |
+| size     | Point size             |
+
+Changing these values changes only this layer.
+
+---
+
+## Layer 2 — First Freeze
+
+```r
+geom_point(
+  data = first_freeze_yday,
+  aes(...),
+  fill = "purple",
+  shape = 21,
+  size = 3,
+  color = "black"
+)
+```
+
+Important options:
+
+| Option | Effect         |
+| ------ | -------------- |
+| fill   | Interior color |
+| color  | Outline color  |
+| shape  | Point symbol   |
+| size   | Marker size    |
+
+Shape **21** is useful because it allows separate fill and border colors.
+
+---
+
+## Layer 3 — Last Freeze
+
+```r
+geom_point(
+  data = last_freeze_yday,
+  aes(...),
+  fill = "blue",
+  shape = 21,
+  size = 3,
+  color = "black"
+)
+```
+
+This layer is identical except for the dataset and color.
+
+---
+
+# Customize the Axes
+
+```r
+scale_y_reverse(...)
+```
+
+The years are reversed so older years appear near the top and recent years near the bottom.
+
+This makes long-term trends easier to see.
+
+---
+
+```{r}
+scale_x_date(
+  date_labels = "%b",
+  breaks = "month"
+)
+```
+
+Displays:
+
+Jan Feb Mar Apr ...
+
+instead of numeric dates.
+
+---
+
+# Apply a Theme
+
+```r
+theme_minimal()
+```
+
+This removes unnecessary chart decorations while keeping axis labels and grid lines.
+
+Different themes can dramatically change the appearance without changing the data.
+
+Examples include:
+
+* theme_bw()
+* theme_classic()
+* theme_light()
+
+---
+
+# Modify the Title
+
+```r
+theme(
+  plot.title.position = "panel",
+  plot.title = element_textbox_simple(...)
+)
+```
+
+The `ggtext` package allows:
+
+* bold headings
+* multiple colors
+* multiple font sizes
+* line spacing
+* padding
+
+without manually drawing text.
+
+---
+
+# Add Labels
+
+```r
+ggtitle(...)
+```
+
+Creates the title.
+
+The title is assembled from several text strings so the selected freezing temperature is automatically inserted.
+
+---
+
+```r
+xlab("")
+ylab("")
+```
+
+These remove axis labels because the months and years are already self-explanatory.
+
+---
+
+# Display the Plot
+
+
+
+```{r}
+freeze
+```
+
+Typing the object name tells R to draw the figure.
+
+---
+
+# Save the Figure
+
+```r
+ggsave(
+  paste0(filename1, FREEZE, filename2),
+  bg = "white",
+  height = 6.5,
+  width = 8,
+  dpi = 300
+)
+```
+
+Important arguments:
+
+| Argument | Purpose          |
+| -------- | ---------------- |
+| filename | Output file      |
+| width    | Width in inches  |
+| height   | Height in inches |
+| dpi      | Image resolution |
+| bg       | Background color |
+
+Increasing the DPI improves image quality for printing.
+
+---
+
+# Summary
+
+This script demonstrates a common workflow used in environmental data analysis:
+
+1. Import weather observations.
+2. Create useful date variables.
+3. Filter observations based on a threshold.
+4. Summarize by year.
+5. Build a layered visualization with ggplot.
+6. Save a publication-quality figure.
+
+One of ggplot's greatest strengths is its layered design. Every `geom_*()` function adds another layer to the figure, while functions beginning with `scale_`, `theme()`, `labs()`, and `coord_` adjust the appearance without modifying the underlying data. Understanding this separation makes it much easier to customize plots and troubleshoot changes.
+
+
+
+#Now that we have an idea of what we can do with this data, let's see if we can add some user interactivity with Shiny
+
+
+# What is Shiny?
+
+The **Shiny** package allows users to build interactive web applications directly in R.
+
+A Shiny app combines:
+
+* A **user interface (UI)** for controls (sliders, buttons, dropdowns)
+* A **server function** that processes data
+* **Reactive outputs** that automatically update when inputs change
+
+### Why use Shiny here?
+
+In a static report:
+
+* the temperature threshold is fixed (e.g., 32°F)
+* plots must be regenerated manually to test new values
+
+In a Shiny app:
+
+* users can adjust the temperature threshold dynamically
+* visualizations update instantly without re-running code
+
+This makes the analysis more exploratory and flexible.
+
+Let's walk through a few examples first:
+
+Here we will use:
+```{r setup, include=TRUE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+for the file set-up.
+
+
+This R Markdown document is made interactive using Shiny. Unlike the more traditional workflow of creating static reports, you can now create documents that allow your readers to change the assumptions underlying your analysis and see the results immediately. 
+
+To learn more, see [Interactive Documents](http://rmarkdown.rstudio.com/authoring_shiny.html).
+
+## Inputs and Outputs
+
+You can embed Shiny inputs and outputs in your document. Outputs are automatically updated whenever inputs change.  This demonstrates how a standard R plot can be made interactive by wrapping it in the Shiny `renderPlot` function. The `selectInput` and `sliderInput` functions create the input widgets used to drive the plot.
+
+```{r eruptions, echo=FALSE}
+inputPanel(
+  selectInput("n_breaks", label = "Number of bins:",
+              choices = c(10, 20, 35, 50), selected = 20),
+  
+  sliderInput("bw_adjust", label = "Bandwidth adjustment:",
+              min = 0.2, max = 2, value = 1, step = 0.2)
+)
+
+renderPlot({
+  hist(faithful$eruptions, probability = TRUE, breaks = as.numeric(input$n_breaks),
+       xlab = "Duration (minutes)", main = "Geyser eruption duration")
+  
+  dens <- density(faithful$eruptions, adjust = input$bw_adjust)
+  lines(dens, col = "blue")
+})
+```
+
+## Embedded Application
+
+It's also possible to embed an entire Shiny application within an R Markdown document using the `shinyAppDir` function. This example embeds a Shiny application located in another directory:
+
+```{r tabsets, echo=FALSE}
+shinyAppDir(
+  system.file("examples/06_tabsets", package = "shiny"),
+  options = list(
+    width = "100%", height = 550
+  )
+)
+```
+
+Note the use of the `height` parameter to determine how much vertical space the embedded application should occupy.
+
+You can also use the `shinyApp` function to define an application inline rather then in an external directory.
+
+In all of R code chunks above the `echo = FALSE` attribute is used. This is to prevent the R code within the chunk from rendering in the document alongside the Shiny components.
+still using:
+library(shiny)
+library(tidyverse)
+library(lubridate)
+library(ggtext)
+
+
+
+<!-- ```{r} -->
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- ``` -->
+
+<!-- # Load data once (outside the app for efficiency) -->
+
+
+<!-- csv_data <- read_csv("Weather/portland_1871_11_2022-12_temp_prec.csv") -->
+
+<!-- ui <- fluidPage( -->
+
+<!--   titlePanel("Portland First and Last Temperatur Dates Explorer"), -->
+
+<!--   sidebarLayout( -->
+<!--     sidebarPanel( -->
+<!--       sliderInput( -->
+<!--         inputId = "freeze_temp", -->
+<!--         label = "Selected temperature (°F)", -->
+<!--         min = 28, -->
+<!--         max = 60, -->
+<!--         value = 32, -->
+<!--         step = 1 -->
+<!--       ) -->
+<!--     ), -->
+<!--     mainPanel( -->
+<!--       plotOutput("freezePlot", height = "700px") -->
+<!--     ) -->
+<!--   ) -->
+<!-- ) -->
+
+<!-- server <- function(input, output, session) { -->
+
+<!--   output$freezePlot <- renderPlot({ -->
+<!--     FREEZE <- input$freeze_temp -->
+<!--     extract_dates <- csv_data %>% -->
+<!--       mutate( -->
+<!--         year = year(DATE), -->
+<!--         month = month(DATE), -->
+<!--         yday = yday(DATE) -->
+<!--       ) -->
+<!--     freeze_days <- extract_dates %>% -->
+<!--       select(year, TMIN, yday) %>% -->
+<!--       filter(TMIN <= FREEZE) -->
+<!--     first_freeze <- extract_dates %>% -->
+<!--       group_by(year) %>% -->
+<!--       filter(TMIN <= FREEZE, month > 7) %>% -->
+<!--       summarise(min = min(DATE), .groups = "drop") -->
+<!--     last_freeze <- extract_dates %>% -->
+<!--       group_by(year) %>% -->
+<!--       filter(TMIN <= FREEZE, month < 7) %>% -->
+<!--       summarise(max = max(DATE), .groups = "drop") -->
+<!--     first_freeze_yday <- first_freeze %>% -->
+<!--       mutate(yday = yday(min)) -->
+<!--     last_freeze_yday <- last_freeze %>% -->
+<!--       mutate(yday = yday(max)) -->
+<!--     ggplot() + -->
+<!--       geom_point( -->
+<!--         data = freeze_days, -->
+<!--         aes(y = year, x = as.Date(yday, origin = "2020-01-01")), -->
+<!--         color = "gray", -->
+<!--         size = 0.8 -->
+<!--       ) + -->
+<!--       geom_point( -->
+<!--         data = first_freeze_yday, -->
+<!--         aes(y = year, x = as.Date(yday, origin = "2020-01-01")), -->
+<!--         fill = "purple", -->
+<!--         shape = 21, -->
+<!--         size = 3, -->
+<!--         color = "black" -->
+<!--       ) + -->
+<!--       geom_point( -->
+<!--         data = last_freeze_yday, -->
+<!--         aes(y = year, x = as.Date(yday, origin = "2020-01-01")), -->
+<!--         fill = "blue", -->
+<!--         shape = 21, -->
+<!--         size = 3, -->
+<!--         color = "black" -->
+<!--       ) + -->
+<!--       scale_y_reverse() + -->
+<!--       scale_x_date(date_labels = "%b", breaks = "month") + -->
+<!--       theme_minimal() + -->
+<!--       labs( -->
+<!--         title = paste("Freeze threshold:", FREEZE, "°F") -->
+<!--       ) -->
+<!--   }) -->
+<!-- } -->
+
+<!-- shinyApp(ui, server) -->
+
+

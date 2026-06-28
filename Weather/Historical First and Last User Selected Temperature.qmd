@@ -1,0 +1,192 @@
+---
+title: "Historical First and Last User Selected Temperature"
+author: "Wendy Horvat"
+format: html
+engine: shiny
+---
+
+library(shiny)
+library(tidyverse)
+library(lubridate)
+
+
+Overview
+
+This document explores historical temperature threshold events in Portland, Oregon using interactive visualization.
+
+Users can adjust a temperature threshold and immediately see how cold-event timing changes over time.
+
+What is Quarto?
+
+Quarto is a next-generation publishing system that integrates:
+
+narrative text
+executable code
+interactive Shiny components
+
+Unlike static reports, Quarto documents can behave like lightweight web applications.
+
+What is Quarto?
+
+Quarto is a next-generation publishing system that integrates:
+
+narrative text
+executable code
+interactive Shiny components
+
+Unlike static reports, Quarto documents can behave like lightweight web applications.
+
+Load Data
+csv_data <- read_csv("data/portland_1871_11_2022-12_temp_prec.csv")
+
+User Input (Interactive Slider)
+
+sliderInput(
+  inputId = "temp_threshold",
+  label = "Temperature threshold (°F)",
+  min = 28,
+  max = 40,
+  value = 32,
+  step = 1
+)
+
+Reactive Data Processing
+
+threshold_event_data <- reactive({
+
+  temp_threshold <- input$temp_threshold
+
+  processed_data <- csv_data %>%
+    mutate(
+      year = year(DATE),
+      month = month(DATE),
+      yday = yday(DATE)
+    )
+
+  threshold_event_days <- processed_data %>%
+    filter(TMIN <= temp_threshold)
+
+  first_threshold_event <- processed_data %>%
+    group_by(year) %>%
+    filter(TMIN <= temp_threshold, month > 7) %>%
+    summarise(first_date = min(DATE), .groups = "drop") %>%
+    mutate(yday = yday(first_date))
+
+  last_threshold_event <- processed_data %>%
+    group_by(year) %>%
+    filter(TMIN <= temp_threshold, month < 7) %>%
+    summarise(last_date = max(DATE), .groups = "drop") %>%
+    mutate(yday = yday(last_date))
+
+  list(
+    threshold_event_days = threshold_event_days,
+    first_threshold_event = first_threshold_event,
+    last_threshold_event = last_threshold_event
+  )
+})
+
+
+Interactive Plot
+
+renderPlot({
+
+  data_list <- threshold_event_data()
+
+  threshold_event_days <- data_list$threshold_event_days
+  first_threshold_event <- data_list$first_threshold_event
+  last_threshold_event <- data_list$last_threshold_event
+
+  ggplot() +
+
+    geom_point(
+      data = threshold_event_days,
+      aes(y = year, x = as.Date(yday, origin = "2020-01-01")),
+      color = "gray",
+      size = 0.8
+    ) +
+
+    geom_point(
+      data = first_threshold_event,
+      aes(y = year, x = as.Date(yday, origin = "2020-01-01")),
+      fill = "purple",
+      shape = 21,
+      size = 3,
+      color = "black"
+    ) +
+
+    geom_point(
+      data = last_threshold_event,
+      aes(y = year, x = as.Date(yday, origin = "2020-01-01")),
+      fill = "blue",
+      shape = 21,
+      size = 3,
+      color = "black"
+    ) +
+
+    scale_y_reverse() +
+    scale_x_date(date_labels = "%b", breaks = "month") +
+    theme_minimal() +
+
+    labs(
+      title = paste("Temperature threshold:", input$temp_threshold, "°F"),
+      x = NULL,
+      y = NULL
+    )
+})
+
+What changed (important improvements)
+1. Consistent variable naming
+
+Before:
+
+freeze_days
+first_freeze
+last_freeze
+
+Now:
+
+threshold_event_days
+first_threshold_event
+last_threshold_event
+
+This makes the logic reusable for:
+
+freezing
+heat thresholds
+drought thresholds
+any climate metric
+2. Cleaner reactive structure
+
+Everything is grouped into:
+
+threshold_event_data()
+
+
+So the logic is:
+
+compute once per slider change
+reuse in plotting
+3. True interactive document
+
+Unlike R Markdown:
+
+no separate “Shiny app file”
+everything runs inside one .qmd
+behaves like a mini dashboard
+🚀 How to run it
+
+In RStudio:
+Open the .qmd
+Click Render
+A browser window opens with a live slider + plot
+If you want next upgrades
+
+
+
+Next steps for this document could include:
+📈 Add trend line
+Show shift in first/last threshold dates over time
+
+🧭 Add dropdown for city where data from a selected list of cities will appear, unless there is a way to pull the data directly with an api
+
+Turn it into a multi-dataset climate explorer

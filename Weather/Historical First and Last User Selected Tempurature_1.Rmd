@@ -1,0 +1,312 @@
+---
+title: "First and Last of User Selected Tempurature"
+author: "Wendy Horvat"
+date: "`r Sys.Date()`"
+output: html_document
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+---
+
+# Interactive Exploration of Temperature Threshold Events in Portland, Oregon
+
+## Overview
+
+This document explores historical temperature threshold events in Portland, Oregon using daily weather observations. Instead of using a fixed definition of freezing conditions, this version allows the user to explore how different **temperature thresholds** affect the frequency and timing of cold-weather events.
+
+The analysis is implemented using an interactive application built with Shiny.
+
+---
+
+# What is Shiny?
+
+The **Shiny** package allows users to build interactive web applications directly in R.
+
+A Shiny app combines:
+
+* A **user interface (UI)** for controls (sliders, buttons, dropdowns)
+* A **server function** that processes data
+* **Reactive outputs** that automatically update when inputs change
+
+### Why use Shiny here?
+
+In a static report:
+
+* the temperature threshold is fixed (e.g., 32°F)
+* plots must be regenerated manually to test new values
+
+In a Shiny app:
+
+* users can adjust the temperature threshold dynamically
+* visualizations update instantly without re-running code
+
+This makes the analysis more exploratory and flexible.
+
+---
+
+# Required Packages
+
+```r id="p2k9rt"
+library(shiny)
+library(tidyverse)
+library(lubridate)
+library(ggtext)
+```
+
+### Package roles
+
+* **shiny** → builds interactive applications
+* **tidyverse** → data manipulation and visualization tools
+* **lubridate** → simplifies working with dates
+* **ggtext** → allows styled text in plot annotations
+
+---
+
+# Load the Data
+
+```r id="n1q8ab"
+csv_data <- read_csv("data/portland_1871_11_2022-12_temp_prec.csv")
+```
+
+This dataset contains daily weather observations, including temperature and date information.
+
+---
+
+# Shiny Application Structure
+
+A Shiny application has two main components:
+
+### 1. User Interface (UI)
+
+Defines what the user sees and interacts with.
+
+### 2. Server
+
+Defines how the data responds to user input.
+
+---
+
+# User Interface (UI)
+
+```r id="v8x2jk"
+ui <- fluidPage(
+  
+  titlePanel("Portland Temperature Threshold Explorer"),
+  
+  sidebarLayout(
+    
+    sidebarPanel(
+      sliderInput(
+        inputId = "temp_threshold",
+        label = "Temperature threshold (°F)",
+        min = 28,
+        max = 40,
+        value = 32,
+        step = 1
+      )
+    ),
+    
+    mainPanel(
+      plotOutput("tempPlot", height = "700px")
+    )
+  )
+)
+```
+
+### UI components explained
+
+* **fluidPage()**
+  Creates a responsive web layout.
+
+* **titlePanel()**
+  Displays the application title.
+
+* **sidebarLayout()**
+  Splits the page into:
+
+  * a control panel (left)
+  * a visualization panel (right)
+
+* **sliderInput()**
+  Creates an interactive slider:
+
+  * `inputId` identifies the input in server logic
+  * `min`, `max`, `step` define the allowed range
+  * `value` sets the default threshold
+
+* **plotOutput()**
+  Allocates space for the interactive plot.
+
+---
+
+# Server Logic
+
+```r id="k3m9cz"
+server <- function(input, output, session) {
+  
+  output$tempPlot <- renderPlot({
+    
+    TEMP_THRESHOLD <- input$temp_threshold
+```
+
+### Reactivity concept
+
+* `input$temp_threshold` updates automatically when the slider moves
+* `renderPlot()` ensures the plot is recalculated whenever inputs change
+
+---
+
+## Prepare the data
+
+```r id="q9t3lm"
+extract_dates <- csv_data %>%
+  mutate(
+    year = year(DATE),
+    month = month(DATE),
+    yday = yday(DATE)
+  )
+```
+
+This creates:
+
+| Variable | Meaning                         |
+| -------- | ------------------------------- |
+| year     | Calendar year                   |
+| month    | Month of observation            |
+| yday     | Day of year (seasonal position) |
+
+---
+
+## Identify all threshold events
+
+```r id="r6w1zn"
+threshold_days <- extract_dates %>%
+  filter(TMIN <= TEMP_THRESHOLD)
+```
+
+These are all days where the minimum temperature is at or below the selected threshold.
+
+---
+
+## First threshold event (fall/winter)
+
+```r id="t4x8qp"
+first_threshold <- extract_dates %>%
+  group_by(year) %>%
+  filter(TMIN <= TEMP_THRESHOLD, month > 7) %>%
+  summarise(min = min(DATE), .groups = "drop")
+```
+
+* Restricts search to August–December
+* Identifies the first cold event of the cool season
+
+---
+
+## Last threshold event (winter/spring)
+
+```r id="m7v2sd"
+last_threshold <- extract_dates %>%
+  group_by(year) %>%
+  filter(TMIN <= TEMP_THRESHOLD, month < 7) %>%
+  summarise(max = max(DATE), .groups = "drop")
+```
+
+* Restricts search to January–June
+* Identifies the final cold event before warmer months
+
+---
+
+## Convert to seasonal timeline
+
+```r id="z1p5wr"
+first_threshold_yday <- first_threshold %>%
+  mutate(yday = yday(min))
+
+last_threshold_yday <- last_threshold %>%
+  mutate(yday = yday(max))
+```
+
+This allows all years to be aligned on a shared seasonal axis.
+
+---
+
+# Interactive Plot
+
+```r id="c7n2ld"
+ggplot() +
+  
+  geom_point(
+    data = threshold_days,
+    aes(y = year, x = as.Date(yday, origin = "2020-01-01")),
+    color = "gray",
+    size = 0.8
+  ) +
+  
+  geom_point(
+    data = first_threshold_yday,
+    aes(y = year, x = as.Date(yday, origin = "2020-01-01")),
+    fill = "purple",
+    shape = 21,
+    size = 3,
+    color = "black"
+  ) +
+  
+  geom_point(
+    data = last_threshold_yday,
+    aes(y = year, x = as.Date(yday, origin = "2020-01-01")),
+    fill = "blue",
+    shape = 21,
+    size = 3,
+    color = "black"
+  ) +
+  
+  scale_y_reverse() +
+  scale_x_date(date_labels = "%b", breaks = "month") +
+  
+  theme_minimal() +
+  
+  labs(
+    title = paste("Temperature threshold:", TEMP_THRESHOLD, "°F")
+  )
+```
+
+---
+
+### Interpretation of layers
+
+| Layer         | Meaning                               |
+| ------------- | ------------------------------------- |
+| Gray points   | All days at or below threshold        |
+| Purple points | First threshold event of fall/winter  |
+| Blue points   | Last threshold event of spring/winter |
+
+Each layer is independent and can be modified without affecting others.
+
+---
+
+# Run the Application
+
+```r id="f8q2km"
+shinyApp(ui, server)
+```
+
+This launches a local interactive application where:
+
+* the slider controls the temperature threshold
+* the plot updates instantly
+* no manual re-execution is needed
+
+---
+
+# Summary
+
+This Shiny application converts a static climate analysis into an interactive exploration tool. Users can now adjust the temperature threshold dynamically to examine how different definitions of cold-weather events influence seasonal patterns over time.
+
+---
+
+Next to-do revision:
+
+* rename variables so they are more consistent (e.g., `threshold_event_days` everywhere)

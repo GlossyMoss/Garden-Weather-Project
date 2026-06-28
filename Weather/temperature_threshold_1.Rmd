@@ -1,0 +1,178 @@
+---
+title: "Historical First and Last User Selected Temperature"
+author: "Wendy Horvat"
+output: html_document
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+library(shiny)
+library(tidyverse)
+library(lubridate)
+library(ggtext)
+```
+
+# Historical Temperature Threshold Explorer
+
+This interactive document explores historical temperature threshold events in Portland, Oregon.
+
+Use the slider below to choose the minimum temperature threshold. The graph will update automatically to show:
+
+- Gray points: every day with a minimum temperature at or below the selected threshold
+- Purple points: the first occurrence after July each year
+- Blue points: the last occurrence before July each year
+
+---
+
+# Load the data
+
+```{r}
+csv_data <- read_csv(
+  "data/portland_1871_11_2022-12_temp_prec.csv",
+  show_col_types = FALSE
+)
+
+# Make sure DATE is a Date object
+csv_data <- csv_data %>%
+  mutate(DATE = as.Date(DATE))
+```
+
+---
+
+# Select a Temperature Threshold
+
+```{r}
+sliderInput(
+  inputId = "temperature_threshold",
+  label = "Temperature Threshold (°F)",
+  min = 20,
+  max = 40,
+  value = 32,
+  step = 1
+)
+```
+
+---
+
+# Interactive Plot
+
+```{r, fig.height=7}
+
+renderPlot({
+
+  temperature_threshold <- input$temperature_threshold
+
+  processed_data <- csv_data %>%
+    mutate(
+      year = year(DATE),
+      month = month(DATE),
+      day_of_year = yday(DATE)
+    )
+
+  threshold_event_days <- processed_data %>%
+    filter(TMIN <= temperature_threshold)
+
+  first_threshold_event <- processed_data %>%
+    group_by(year) %>%
+    filter(
+      TMIN <= temperature_threshold,
+      month > 7
+    ) %>%
+    summarise(
+      event_date = min(DATE),
+      .groups = "drop"
+    ) %>%
+    mutate(
+      day_of_year = yday(event_date)
+    )
+
+  last_threshold_event <- processed_data %>%
+    group_by(year) %>%
+    filter(
+      TMIN <= temperature_threshold,
+      month < 7
+    ) %>%
+    summarise(
+      event_date = max(DATE),
+      .groups = "drop"
+    ) %>%
+    mutate(
+      day_of_year = yday(event_date)
+    )
+
+  ggplot() +
+
+    geom_point(
+      data = threshold_event_days,
+      aes(
+        x = as.Date(day_of_year, origin = "2020-01-01"),
+        y = year
+      ),
+      color = "gray",
+      size = 0.8
+    ) +
+
+    geom_point(
+      data = first_threshold_event,
+      aes(
+        x = as.Date(day_of_year, origin = "2020-01-01"),
+        y = year
+      ),
+      fill = "purple",
+      color = "black",
+      shape = 21,
+      size = 3
+    ) +
+
+    geom_point(
+      data = last_threshold_event,
+      aes(
+        x = as.Date(day_of_year, origin = "2020-01-01"),
+        y = year
+      ),
+      fill = "blue",
+      color = "black",
+      shape = 21,
+      size = 3
+    ) +
+
+    scale_y_reverse(
+      breaks = seq(1870, 2020, 10),
+      minor_breaks = seq(1870, 2020, 2)
+    ) +
+
+    scale_x_date(
+      date_labels = "%b",
+      breaks = "month"
+    ) +
+
+    theme_minimal() +
+
+    labs(
+      title = paste(
+        "Annual First and Last Temperature Events at",
+        temperature_threshold,
+        "°F"
+      ),
+      subtitle = "Portland, Oregon",
+      x = "",
+      y = ""
+    )
+
+})
+```
+
+---
+
+# About this Analysis
+
+This visualization updates automatically whenever the temperature threshold changes.
+
+The calculations are repeated each time the slider moves:
+
+1. Identify every day with a minimum temperature at or below the selected threshold.
+2. Find the final threshold event before July.
+3. Find the first threshold event after July.
+4. Plot all events on a yearly timeline.
+
+Experiment with different thresholds to see how the timing of temperature events changes over the historical record.
