@@ -9,17 +9,22 @@ runtime: shiny
 
 ## Introduction
 
-This tutorial demonstrates how to analyze historical daily temperature observations to determine:
+This tutorial demonstrates one method to analyze historical daily temperature observations to determine:
 
 * the **last freezing day** of each winter/spring,
 * the **first freezing day** of each fall/winter, and
-* every day during the year where the minimum temperature was at or below a selected freezing threshold.
+* every day during the year where the minimum temperature was at or below a selected freezing threshold for climates in the northern hemisphere.
 
-The finished figure provides a visual summary of how freeze dates have changed over more than 150 years of weather observations.
+This is specifically for regions that have different growing seasons where plants experience temperature change that impact their growth cycles throughout the year.
+The finished figure provides a visual summary of how freeze dates have changed over more than 150 years of weather observations for what is now the Portland, Oregon metro area.
+
+The concepts here can be generalized to apply to situations in which there is a cyclic nature to the behavior of some measurable data element collected for analysis.
+
+Here we apply the concept to gardening and specifically gaining information on when to plant based on historical temperature in a given local.
 
 ---
 
-# Required Packages
+## Required Packages
 
 ```{r}
 library(tidyverse)
@@ -28,9 +33,9 @@ library(ggtext)
 library(ggplot2)
 ```
 
-## Why these packages?
+### Why these packages?
 
-### tidyverse
+#### tidyverse
 
 The **tidyverse** is a collection of packages designed for data science. It includes tools for:
 
@@ -45,7 +50,7 @@ Using the tidyverse makes code easier to read because data operations are writte
 
 ---
 
-### lubridate
+#### lubridate
 
 Weather data usually contains dates.
 
@@ -59,7 +64,7 @@ instead of writing complicated date calculations manually.
 
 ---
 
-### ggtext
+#### ggtext
 
 Normally plot titles only allow plain text.
 
@@ -74,15 +79,29 @@ This makes it possible to include a legend directly inside the plot title.
 
 ---
 
-# Import the Weather Data
+## Import the Weather Data
+
+Get the data from [climate.gov](https://www.climate.gov/maps-data/dataset/past-weather-zip-code-data-table)
+via online search https://www.ncdc.noaa.gov/cdo-web/search. For the current iteration of this project we explore Portland, Oregon, which has many micro-climates. So keep in mind that, as with any data, this is specific to how the data was collected. We will discuss this more in a different section. 
+
+Now that we have the csv, we save it to our working directory and call it within this file with
+
 
 ```{r}
 csv_data <- read_csv("portland_1871_11_2022-12_temp_prec.csv")
+
 ```
 
+
+Suggestion for appending new data, (added 2021-full year and 2020-December data), use arrange() to append just the new rows.
+```r
+sort_data <- csv_data %>%
+  arrange(DATE)
+write_csv(sort_data, 'Yearly first and last freeze data.csv')
+```
 The dataset contains daily observations including:
 
-* DATE
+* date
 * minimum temperature (`TMIN`)
 * maximum temperature
 * precipitation
@@ -91,7 +110,7 @@ The analysis only requires the date and minimum temperature.
 
 ---
 
-# Choose the Freeze Threshold
+## Choose the Freeze Threshold
 
 ```{r}
 FREEZE <- 32
@@ -113,7 +132,7 @@ Changing one line updates the entire analysis.
 
 ---
 
-# Extract Useful Date Information
+## Extract Useful Date Information
 
 ```{r}
 extract_dates <- csv_data %>%
@@ -138,7 +157,9 @@ Using the day-of-year allows every year's freeze dates to be plotted on the same
 
 ---
 
-# Find Every Freezing Day
+## Find Every Freezing Day 
+#### for Each of the Last 150ish Years
+These will be the 'faded background' points in the graphic display.
 
 ```{r}
 freeze_days <- extract_dates %>%
@@ -149,11 +170,13 @@ freeze_days <- extract_dates %>%
 
 This keeps every day where the minimum temperature is at or below the selected freeze threshold.
 
-These become the small gray dots in the final figure.
+Again, these become the small gray dots in the final figure to most easily see when the portion of the year is that is *no bueno* for planting your **tender** veggies.
 
 ---
 
-# Find the First Freeze of Autumn
+## Find the First Freeze of **Autumn** 
+#### for Each of the Last 150ish Years
+These will be the purple larger points that will represent the break point after the summer growing season, that the days that are more likely to hit the given temperature, which occured on this point sometime around the fall of each year, certainly after July, the 7th month of the year, commonly the growing season for many regions in the northern hemisphere.
 
 ```{r}
 first_freeze <- extract_dates %>%
@@ -166,11 +189,11 @@ Why `month > 7`?
 
 Only August through December are searched.
 
-Otherwise a January freeze would incorrectly be identified as the year's "first" freeze.
+Otherwise a January freeze would incorrectly be identified as the year's "first" freeze.  We will flip the inequality sign to find the last freeze of each spring.
 
----
-
-# Find the Last Freeze of Spring
+## Find the Last Freeze of **Spring**
+#### for Each of the Last 150ish Years
+These will be the blue larger points that will represent loudly, that no more days that hit the given temperature occured after this point until around the fall of this year.
 
 ```{r}
 last_freeze <- extract_dates %>%
@@ -179,13 +202,11 @@ last_freeze <- extract_dates %>%
   summarise(max = max(DATE))
 ```
 
-Only January through June are searched.
-
-This identifies the last freezing event before summer.
+Only January through June are searched. This identifies the last freezing event before summer.
 
 ---
 
-# Convert Dates to Day of Year
+## Convert Dates to Day of Year
 
 ```{r}
 first_freeze_yday <- first_freeze %>%
@@ -195,15 +216,11 @@ last_freeze_yday <- last_freeze %>%
   mutate(yday = yday(max))
 ```
 
-The x-axis will display months.
-
-Internally, ggplot uses dates, so the day number is converted into a temporary date.
-
-The actual year used is unimportant.
+The x-axis will display months. Internally, ggplot uses dates, so the day number is converted into a temporary date. The actual year used is unimportant here.
 
 ---
 
-# Building the Plot
+## Building the Plot
 
 ```{r}
 freeze <- ggplot()
@@ -215,9 +232,11 @@ Think of ggplot like stacking transparent sheets on top of one another.
 
 ---
 
-## Layer 1 — Gray Freeze Days
 
-```r
+
+### Layer 1 — Gray Freeze Days
+
+```{r}
 geom_point(
   data = freeze_days,
   aes(
@@ -246,12 +265,15 @@ Changing these values changes only this layer.
 
 ---
 
-## Layer 2 — First Freeze
+### Layer 2 — First Freeze
 
-```r
+```{r}
 geom_point(
   data = first_freeze_yday,
-  aes(...),
+  aes(
+    y = year,
+    x = as.Date(yday, origin = "2020-01-01")
+    ),
   fill = "purple",
   shape = 21,
   size = 3,
@@ -272,12 +294,15 @@ Shape **21** is useful because it allows separate fill and border colors.
 
 ---
 
-## Layer 3 — Last Freeze
+### Layer 3 — Last Freeze
 
-```r
+```{r}
 geom_point(
   data = last_freeze_yday,
-  aes(...),
+  aes(
+    y = year,
+    x = as.Date(yday, origin = "2020-01-01")
+    ),
   fill = "blue",
   shape = 21,
   size = 3,
@@ -289,7 +314,7 @@ This layer is identical except for the dataset and color.
 
 ---
 
-# Customize the Axes
+#### Customize the Axes
 
 ```r
 scale_y_reverse(...)
@@ -316,15 +341,13 @@ instead of numeric dates.
 
 ---
 
-# Apply a Theme
+#### Apply a Theme
 
 ```r
 theme_minimal()
 ```
 
-This removes unnecessary chart decorations while keeping axis labels and grid lines.
-
-Different themes can dramatically change the appearance without changing the data.
+This removes unnecessary chart decorations while keeping axis labels and grid lines. Different themes can dramatically change the appearance without changing the data.
 
 Examples include:
 
@@ -334,7 +357,7 @@ Examples include:
 
 ---
 
-# Modify the Title
+#### Modify the Title
 
 ```r
 theme(
@@ -355,7 +378,7 @@ without manually drawing text.
 
 ---
 
-# Add Labels
+#### Add Labels
 
 ```r
 ggtitle(...)
@@ -374,31 +397,72 @@ ylab("")
 
 These remove axis labels because the months and years are already self-explanatory.
 
----
+We will use
+```{r plot-title}
+title_to_paste1 <- "<b>Annual First and Last Freeze at "
 
-# Display the Plot
+title_to_paste2 <- "°F for Portland, OR</b>
+<br><span style='color:black;font-size:10pt'>
+Weather Stations: Regional Forecast Center from 1871, PDX Airport from 1940
+</span>
+<br><span style='color:blue;font-size:10pt'>
+Blue dots indicate the last freeze of winter/spring
+</span>
+<br><span style='color:purple;font-size:10pt'>
+Purple dots indicate the first freeze of fall/winter
+</span>
+<br><span style='color:gray;font-size:10pt'>
+Gray dots indicate days with a minimum temperature at or below
+"
+
+title_to_paste3 <- " degrees Fahrenheit.</span>"
+```
+
+#### Display the Plot
 
 
-
+Now let's go ahead and put all this together to create our plot:
+```{r}
+freeze <-
+  ggplot() +
+  geom_point(data=freeze_days, aes(y=year, x=as.Date(yday,origin='2020-01-01'))
+             , color="gray", size=0.8)+
+  geom_point(data=first_freeze_yday, aes(y=year, x=as.Date(yday,origin='2020-01-01'))
+             ,fill="purple", shape=21, size=3, color='black') +
+  geom_point(data=last_freeze_yday, aes(y=year, x=as.Date(yday,origin='2020-01-01')) 
+             ,fill="blue", shape=21, size=3, color='black') +
+  scale_y_reverse(breaks= seq(1870, 2020, 10), minor_breaks = seq(1870, 2020, 2)) +
+  scale_x_date(date_labels="%b", breaks="month") +
+theme_minimal() +
+labs(
+  title = "Historical First and Last Freeze Dates for Portland, Oregon",
+  x = "Months of the Year",
+  y = "Historical Years"
+)
+```
+Note that the origin date doesn't matter, need date format for the x-axis scale to work. Freezing temperature to model, one may want to choose higher temperature to be more protective or aware of impact to plant longevity.  Now we type the object name, freeze is the name of the plot, and that tells R to draw the figure in the rendered markdown file.
 ```{r}
 freeze
 ```
 
-Typing the object name tells R to draw the figure.
 
----
+#### Save the Figure
 
-# Save the Figure
+```{r}
+filename1 <- "Yearly first and last freeze (" 
+filename2 <- ") for Portland, OR.png"
 
-```r
 ggsave(
-  paste0(filename1, FREEZE, filename2),
+  filename = paste0(filename1, FREEZE, filename2),
+  plot = freeze,
   bg = "white",
   height = 6.5,
   width = 8,
   dpi = 300
 )
 ```
+
+
 
 Important arguments:
 
@@ -414,7 +478,7 @@ Increasing the DPI improves image quality for printing.
 
 ---
 
-# Summary
+## Summary
 
 This script demonstrates a common workflow used in environmental data analysis:
 
@@ -427,12 +491,10 @@ This script demonstrates a common workflow used in environmental data analysis:
 
 One of ggplot's greatest strengths is its layered design. Every `geom_*()` function adds another layer to the figure, while functions beginning with `scale_`, `theme()`, `labs()`, and `coord_` adjust the appearance without modifying the underlying data. Understanding this separation makes it much easier to customize plots and troubleshoot changes.
 
+##### Now that we have an idea of what we can do with this data, let's see if we can add some user interactivity with Shiny
 
 
-#Now that we have an idea of what we can do with this data, let's see if we can add some user interactivity with Shiny
-
-
-# What is Shiny?
+### What is Shiny?
 
 The **Shiny** package allows users to build interactive web applications directly in R.
 
@@ -444,21 +506,22 @@ A Shiny app combines:
 
 ### Why use Shiny here?
 
-In a static report:
+#### In a static report:
 
 * the temperature threshold is fixed (e.g., 32°F)
 * plots must be regenerated manually to test new values
 
-In a Shiny app:
+#### In a Shiny app:
 
 * users can adjust the temperature threshold dynamically
 * visualizations update instantly without re-running code
 
 This makes the analysis more exploratory and flexible.
 
-Let's walk through a few examples first:
+#### Let's walk through a few examples first. 
+These are provided by RStudio if you don't select a blank document.  Let's take a quick look:
 
-Here we will use:
+In the following examples they use:
 ```{r setup, include=TRUE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
@@ -469,11 +532,11 @@ This R Markdown document is made interactive using Shiny. Unlike the more tradit
 
 To learn more, see [Interactive Documents](http://rmarkdown.rstudio.com/authoring_shiny.html).
 
-## Inputs and Outputs
+#### Inputs and Outputs
 
 You can embed Shiny inputs and outputs in your document. Outputs are automatically updated whenever inputs change.  This demonstrates how a standard R plot can be made interactive by wrapping it in the Shiny `renderPlot` function. The `selectInput` and `sliderInput` functions create the input widgets used to drive the plot.
 
-```{r eruptions, echo=FALSE}
+```{r eruptions, echo=TRUE}
 inputPanel(
   selectInput("n_breaks", label = "Number of bins:",
               choices = c(10, 20, 35, 50), selected = 20),
@@ -490,6 +553,7 @@ renderPlot({
   lines(dens, col = "blue")
 })
 ```
+We will use of version of this in a file titled 'temperature_threshold.rmd'.
 
 ## Embedded Application
 
@@ -504,17 +568,21 @@ shinyAppDir(
 )
 ```
 
-Note the use of the `height` parameter to determine how much vertical space the embedded application should occupy.
+Note the use of the `height` parameter to determine how much vertical space the embedded application should occupy. With the eample that built this interactive visual.
+```r
+shinyAppDir(
+  system.file("examples/06_tabsets", package = "shiny"),
+  options = list(
+    width = "100%", height = 550
+  )
+)
+```
 
 You can also use the `shinyApp` function to define an application inline rather then in an external directory.
 
 In all of R code chunks above the `echo = FALSE` attribute is used. This is to prevent the R code within the chunk from rendering in the document alongside the Shiny components.
-still using:
-library(shiny)
-library(tidyverse)
-library(lubridate)
-library(ggtext)
 
+##### Stay Tuned: In the follow-up to this file we will apply the concepts shown in the Shiny examples to parameterize the weather data.
 
 
 <!-- ```{r} -->
