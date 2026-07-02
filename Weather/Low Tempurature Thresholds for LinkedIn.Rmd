@@ -1,0 +1,110 @@
+---
+title: "<span style = 'color:black;font-size:20pt'>Interactive Low Temperature Threshold Explorer"
+author: "<span style = 'color:black;font-size:12pt'>Wendy Horvat"
+date: "<span style = 'color:black;font-size:12pt'>`r Sys.Date()`"
+output: html_document
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+library(shiny)
+library(dplyr)
+library(lubridate)
+library(ggplot2)
+library(tidyverse)
+library(lubridate)
+library(ggtext)
+```
+```{r echo=FALSE}
+csv_data <- read_csv("portland_1871_11_2022-12_temp_prec.csv", show_col_types = FALSE)
+```
+### Portland, Oregon Low Temperatures
+**Use the slider to select the temperature that your plants need to thrive in spring and begin to suffer in the fall.**
+```{r temp_threshold, echo=FALSE}
+sliderInput(
+  inputId = "temp_threshold",
+  label = "Temperature threshold (°F)",
+  min = 28,
+  max = 60,
+  value = 32,
+  step = 1
+)
+
+
+renderPlot({
+
+  temp_threshold <- input$temp_threshold
+
+  processed_data <- csv_data %>%
+    mutate(
+      year = year(DATE),
+      month = month(DATE),
+      yday = yday(DATE)
+    )
+
+  threshold_event_days <- processed_data %>%
+    filter(TMIN <= temp_threshold)
+
+  first_threshold_event <- processed_data %>%
+    group_by(year) %>%
+    filter(TMIN <= temp_threshold, month > 7) %>%
+    summarise(first_date = min(DATE), .groups = "drop") %>%
+    mutate(yday = yday(first_date))
+
+  last_threshold_event <- processed_data %>%
+    group_by(year) %>%
+    filter(TMIN <= temp_threshold, month < 7) %>%
+    summarise(last_date = max(DATE), .groups = "drop") %>%
+    mutate(yday = yday(last_date))
+
+  title_to_paste2 <- " 1871 - 2022 </b>
+  <br><span style = 'color:black;font-size:12pt'>Weather Stations: Regional Forecast Center from 1871, PDX Airport from 1940</span> 
+  <br><span style = 'color:blue;font-size:12pt'> Blue dots indicate the last selected temperature of winter/spring</span> 
+  <br><span style = 'color:purple;font-size:12pt'> Purple dots indicate the first selected temperature of fall/winter.</span> 
+  <br><span style = 'color:gray;font-size:12pt;face:bold'> Gray dots indicate days with a min temp at or below"
+title_to_paste3 <- " degrees Fahrenheit.</span>"
+  
+  ggplot() +
+
+    geom_point(
+      data = threshold_event_days,
+      aes(y = year, x = as.Date(yday, origin = "2020-01-01")),
+      color = "gray",
+      size = 0.8
+    ) +
+
+    geom_point(
+      data = first_threshold_event,
+      aes(y = year, x = as.Date(yday, origin = "2020-01-01")),
+      fill = "purple",
+      shape = 21,
+      size = 3,
+      color = "black"
+    ) +
+
+    geom_point(
+      data = last_threshold_event,
+      aes(y = year, x = as.Date(yday, origin = "2020-01-01")),
+      fill = "blue",
+      shape = 21,
+      size = 3,
+      color = "black"
+    ) +
+
+    scale_y_reverse() +
+    scale_x_date(date_labels = "%b", breaks = "month") +
+    theme_minimal() +
+    theme( plot.title.position = "panel"
+         ,plot.title = element_textbox_simple(
+           size = 13,
+           lineheight = 1,
+           padding = margin(5.5, 5.5, 5.5, 5.5),
+           margin = margin(0, 0, 5.5, 0))) +
+    ggtitle(paste( title_to_paste2, temp_threshold, title_to_paste3)) +
+    xlab("")+
+    ylab("")
+    
+})
+```
+
+An interactive plot where the first and last temperature is a user selected parameter.  Select a temperature to see when the last day it occurs in the spring and the first day in the fall for Portland, Oregon. 
